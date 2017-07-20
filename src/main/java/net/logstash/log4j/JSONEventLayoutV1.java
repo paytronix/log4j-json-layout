@@ -25,17 +25,14 @@ public class JSONEventLayoutV1 extends Layout {
     private String hostname = new HostData().getHostName();
     private String threadName;
     private long timestamp;
-    private String ndc;
     private Map mdc;
-    private LocationInfo info;
     private HashMap<String, Object> exceptionInformation;
-    private static Integer version = 1;
 
 
     private JSONObject logstashEvent;
 
     public static final TimeZone UTC = TimeZone.getTimeZone("UTC");
-    public static final FastDateFormat ISO_DATETIME_TIME_ZONE_FORMAT_WITH_MILLIS = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", UTC);
+    public static final FastDateFormat ISO_DATETIME_TIME_ZONE_FORMAT_WITH_MILLIS = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss.SSS");
     public static final String ADDITIONAL_DATA_PROPERTY = "net.logstash.log4j.JSONEventLayoutV1.UserFields";
 
     public static String dateFormat(long timestamp) {
@@ -64,7 +61,6 @@ public class JSONEventLayoutV1 extends Layout {
         timestamp = loggingEvent.getTimeStamp();
         exceptionInformation = new HashMap<String, Object>();
         mdc = loggingEvent.getProperties();
-        ndc = loggingEvent.getNDC();
 
         logstashEvent = new JSONObject();
         String whoami = this.getClass().getSimpleName();
@@ -74,29 +70,14 @@ public class JSONEventLayoutV1 extends Layout {
          * "@timestamp" and "@version"
          * Every other field is arbitrary
          */
-        logstashEvent.put("@version", version);
-        logstashEvent.put("@timestamp", dateFormat(timestamp));
+        logstashEvent.put("timestamp", dateFormat(timestamp));
 
         /**
          * Extract and add fields from log4j config, if defined
          */
         if (getUserFields() != null) {
             String userFlds = getUserFields();
-            LogLog.debug("["+whoami+"] Got user data from log4j property: "+ userFlds);
             addUserFields(userFlds);
-        }
-
-        /**
-         * Extract fields from system properties, if defined
-         * Note that CLI props will override conflicts with log4j config
-         */
-        if (System.getProperty(ADDITIONAL_DATA_PROPERTY) != null) {
-            if (getUserFields() != null) {
-                LogLog.warn("["+whoami+"] Loading UserFields from command-line. This will override any UserFields set in the log4j configuration file");
-            }
-            String userFieldsProperty = System.getProperty(ADDITIONAL_DATA_PROPERTY);
-            LogLog.debug("["+whoami+"] Got user data from system property: " + userFieldsProperty);
-            addUserFields(userFieldsProperty);
         }
 
         /**
@@ -108,29 +89,19 @@ public class JSONEventLayoutV1 extends Layout {
         if (loggingEvent.getThrowableInformation() != null) {
             final ThrowableInformation throwableInformation = loggingEvent.getThrowableInformation();
             if (throwableInformation.getThrowable().getClass().getCanonicalName() != null) {
-                exceptionInformation.put("exception_class", throwableInformation.getThrowable().getClass().getCanonicalName());
+                addEventData("exception_class", throwableInformation.getThrowable().getClass().getCanonicalName());
             }
             if (throwableInformation.getThrowable().getMessage() != null) {
-                exceptionInformation.put("exception_message", throwableInformation.getThrowable().getMessage());
+                addEventData("exception_message", throwableInformation.getThrowable().getMessage());
             }
             if (throwableInformation.getThrowableStrRep() != null) {
                 String stackTrace = StringUtils.join(throwableInformation.getThrowableStrRep(), "\n");
-                exceptionInformation.put("stacktrace", stackTrace);
+                addEventData("stacktrace", stackTrace);
             }
-            addEventData("exception", exceptionInformation);
-        }
-
-        if (locationInfo) {
-            info = loggingEvent.getLocationInformation();
-            addEventData("file", info.getFileName());
-            addEventData("line_number", info.getLineNumber());
-            addEventData("class", info.getClassName());
-            addEventData("method", info.getMethodName());
         }
 
         addEventData("logger_name", loggingEvent.getLoggerName());
         addEventData("mdc", mdc);
-        addEventData("ndc", ndc);
         addEventData("level", loggingEvent.getLevel().toString());
         addEventData("thread_name", threadName);
 
@@ -139,15 +110,6 @@ public class JSONEventLayoutV1 extends Layout {
 
     public boolean ignoresThrowable() {
         return ignoreThrowable;
-    }
-
-    /**
-     * Query whether log messages include location information.
-     *
-     * @return true if location information is included in log messages, false otherwise.
-     */
-    public boolean getLocationInfo() {
-        return locationInfo;
     }
 
     /**
