@@ -33,8 +33,7 @@ public class JSONEventLayoutV1Test {
     static final String[] logstashFields = new String[]{
             "message",
             "source_host",
-            "@timestamp",
-            "@version"
+            "timestamp"
     };
 
     @BeforeClass
@@ -59,19 +58,6 @@ public class JSONEventLayoutV1Test {
         logger.info("this is an info message");
         String message = appender.getMessages()[0];
         Assert.assertTrue("Event is not valid JSON", JSONValue.isValidJsonStrict(message));
-    }
-
-    @Test
-    public void testJSONEventLayoutHasUserFieldsFromProps() {
-        System.setProperty(JSONEventLayoutV1.ADDITIONAL_DATA_PROPERTY, userFieldsSingleProperty);
-        logger.info("this is an info message with user fields");
-        String message = appender.getMessages()[0];
-        Assert.assertTrue("Event is not valid JSON", JSONValue.isValidJsonStrict(message));
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-        Assert.assertTrue("Event does not contain field 'field1'" , jsonObject.containsKey("field1"));
-        Assert.assertEquals("Event does not contain value 'value1'", "propval1", jsonObject.get("field1"));
-        System.clearProperty(JSONEventLayoutV1.ADDITIONAL_DATA_PROPERTY);
     }
 
     @Test
@@ -111,29 +97,6 @@ public class JSONEventLayoutV1Test {
     }
 
     @Test
-    public void testJSONEventLayoutUserFieldsPropOverride() {
-        // set the property first
-        System.setProperty(JSONEventLayoutV1.ADDITIONAL_DATA_PROPERTY, userFieldsSingleProperty);
-
-        // set the config values
-        JSONEventLayoutV1 layout = (JSONEventLayoutV1) appender.getLayout();
-        String prevUserData = layout.getUserFields();
-        layout.setUserFields(userFieldsSingle);
-
-        logger.info("this is an info message with user fields");
-        String message = appender.getMessages()[0];
-        Assert.assertTrue("Event is not valid JSON", JSONValue.isValidJsonStrict(message));
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-        Assert.assertTrue("Event does not contain field 'field1'" , jsonObject.containsKey("field1"));
-        Assert.assertEquals("Event does not contain value 'propval1'", "propval1", jsonObject.get("field1"));
-
-        layout.setUserFields(prevUserData);
-        System.clearProperty(JSONEventLayoutV1.ADDITIONAL_DATA_PROPERTY);
-
-    }
-
-    @Test
     public void testJSONEventLayoutHasKeys() {
         logger.info("this is a test message");
         String message = appender.getMessages()[0];
@@ -142,18 +105,6 @@ public class JSONEventLayoutV1Test {
         for (String fieldName : logstashFields) {
             Assert.assertTrue("Event does not contain field: " + fieldName, jsonObject.containsKey(fieldName));
         }
-    }
-
-    @Test
-    public void testJSONEventLayoutHasNDC() {
-        String ndcData = new String("json-layout-test");
-        NDC.push(ndcData);
-        logger.warn("I should have NDC data in my log");
-        String message = appender.getMessages()[0];
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-
-        Assert.assertEquals("NDC is wrong", ndcData, jsonObject.get("ndc"));
     }
 
     @Test
@@ -191,30 +142,9 @@ public class JSONEventLayoutV1Test {
         String message = appender.getMessages()[0];
         Object obj = JSONValue.parse(message);
         JSONObject jsonObject = (JSONObject) obj;
-        JSONObject exceptionInformation = (JSONObject) jsonObject.get("exception");
 
-        Assert.assertEquals("Exception class missing", "java.lang.IllegalArgumentException", exceptionInformation.get("exception_class"));
-        Assert.assertEquals("Exception exception message", exceptionMessage, exceptionInformation.get("exception_message"));
-    }
-
-    @Test
-    public void testJSONEventLayoutHasClassName() {
-        logger.warn("warning dawg");
-        String message = appender.getMessages()[0];
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-
-        Assert.assertEquals("Logged class does not match", this.getClass().getCanonicalName().toString(), jsonObject.get("class"));
-    }
-
-    @Test
-    public void testJSONEventHasFileName() {
-        logger.warn("whoami");
-        String message = appender.getMessages()[0];
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-
-        Assert.assertNotNull("File value is missing", jsonObject.get("file"));
+        Assert.assertEquals("Exception class missing", "java.lang.IllegalArgumentException", jsonObject.get("exception_class"));
+        Assert.assertEquals("Exception exception message", exceptionMessage, jsonObject.get("exception_message"));
     }
 
     @Test
@@ -236,59 +166,8 @@ public class JSONEventLayoutV1Test {
     }
 
     @Test
-    public void testJSONEventLayoutNoLocationInfo() {
-        JSONEventLayoutV1 layout = (JSONEventLayoutV1) appender.getLayout();
-        boolean prevLocationInfo = layout.getLocationInfo();
-
-        layout.setLocationInfo(false);
-
-        logger.warn("warning dawg");
-        String message = appender.getMessages()[0];
-        Object obj = JSONValue.parse(message);
-        JSONObject jsonObject = (JSONObject) obj;
-
-        Assert.assertFalse("atFields contains file value", jsonObject.containsKey("file"));
-        Assert.assertFalse("atFields contains line_number value", jsonObject.containsKey("line_number"));
-        Assert.assertFalse("atFields contains class value", jsonObject.containsKey("class"));
-        Assert.assertFalse("atFields contains method value", jsonObject.containsKey("method"));
-
-        // Revert the change to the layout to leave it as we found it.
-        layout.setLocationInfo(prevLocationInfo);
-    }
-
-    @Test
-    @Ignore
-    public void measureJSONEventLayoutLocationInfoPerformance() {
-        JSONEventLayoutV1 layout = (JSONEventLayoutV1) appender.getLayout();
-        boolean locationInfo = layout.getLocationInfo();
-        int iterations = 100000;
-        long start, stop;
-
-        start = System.currentTimeMillis();
-        for (int i = 0; i < iterations; i++) {
-            logger.warn("warning dawg");
-        }
-        stop = System.currentTimeMillis();
-        long firstMeasurement = stop - start;
-
-        layout.setLocationInfo(!locationInfo);
-        start = System.currentTimeMillis();
-        for (int i = 0; i < iterations; i++) {
-            logger.warn("warning dawg");
-        }
-        stop = System.currentTimeMillis();
-        long secondMeasurement = stop - start;
-
-        System.out.println("First Measurement (locationInfo: " + locationInfo + "): " + firstMeasurement);
-        System.out.println("Second Measurement (locationInfo: " + !locationInfo + "): " + secondMeasurement);
-
-        // Clean up
-        layout.setLocationInfo(!locationInfo);
-    }
-
-    @Test
     public void testDateFormat() {
         long timestamp = 1364844991207L;
-        Assert.assertEquals("format does not produce expected output", "2013-04-01T19:36:31.207Z", JSONEventLayoutV1.dateFormat(timestamp));
+        Assert.assertEquals("format does not produce expected output", "2013-04-01 15:36:31.207", JSONEventLayoutV1.dateFormat(timestamp));
     }
 }
